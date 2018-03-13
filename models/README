@@ -1,0 +1,97 @@
+# Sapphire Models
+
+This repository contains SPIN models of algorithms used in 
+the Transactional Sapphire garbage collector [1].
+
+Our implementation of the garbage collector can be found at:
+  http://dx.doi.org/10.5281/zenodo.58855
+
+
+## Contents
+
+- report.pdf
+
+  Technical report.
+
+- concurrentCopy
+
+  Models of concurrent copying protocol.  These models check if
+  a value of a field of an object can be copied correctly while
+  a mutator is writing to the field.  
+
+  `make` command generates nine executable files, each of which
+  models a combination of a copying protocol and a type of the
+  field to be copied.  For example,
+
+  1. `concurrentCopy-STM-SINGLE.exe` uses the STM approach and
+     copies a single word scalar field.
+  2. `concurrentCopy-STM-DOUBLE.exe` uses the STM approach and
+     copies a double word scalar field.
+  3. `concurrentCopy-STM-Reference.exe` uses the STM approach and
+     copies a reference field.
+  4. `concurrentCopy-STMNOFENCE-Reference.exe` uses the STM approach,
+     but a necessary fence instruction is missing.
+  5. `concurrentCopy-CAS-Reference.exe` uses the CAS approach.
+
+  `make check` performs model checking.
+
+- header
+
+  Model of handling of the header word, particularly hashcode.
+  This model ensures that the hashcode of an object never changes.
+
+  Our implementation is efficient but does not correspond to
+  our algorithm in one to one manner.  Rather, we optimised
+  our implementation manually.  Thus, we investigated the
+  correctness of both the pure algorithm and the implementation.
+
+  - `hashcode-alg.pml` is the model of our algorithm.
+  - `hashcode.pml` is the model of our implementation.
+
+  `make check` performs model checking.
+
+- referenceType:
+
+  Checks various properties of reference types in Java.
+  See the paper [2] for details.
+
+  Defining DELETION_BARRIER at the first line of the model enables
+  a deletion write barrier rather than insertion write barrier.
+  
+  `make check` performs model checking.
+
+- preMark
+
+  Models to check the procedure to enable the mark phase barriers.
+
+  `make` command generates two executable files.
+
+  1. `preMark-TYPE1.exe` has a single intermediate phase (pre-mark phase)
+     before the mark phase.
+  2. `preMark-TYPE1.exe` has two intermediate phases before the mark phase.
+
+  `make check` performs model checking.
+
+- preFlip
+
+  Models to check the procedure to change phase from the copy phase
+  to the flip phase.
+
+  `make` command generates two executable files.
+
+  1. `preFlip-TYPE1.exe` has a single intermediate phase (pre-flip phase)
+     between the copy and flip phases.
+  2. `preFlip-TYPE1.exe` has two intermediate phases between the copy and
+     flip phases.
+
+  `make check` performs model checking.
+
+## References
+
+1. Transactional Sapphire: Lessons in High Performance,
+   On-the-fly Garbage Collection [in submission]
+
+2. T. Ugawa, R. E. Jones, C. G. Ritson: Reference object processing
+   in on-the-fly garbage collection, In Proceedings of the 2014
+   International Symposium on Memory Management (ISMM '14),
+   pp. 56--69, (2014). DOI:10.1145/2602988.2602991

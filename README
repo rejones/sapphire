@@ -1,0 +1,13 @@
+TRANSACTIONAL SAPPHIRE
+
+Tomoharu Ugawa, Kochi University of Technology, Japan
+Carl Ritson, University of Kent, UK
+Richard Jones, University of Kent, UK
+
+This is an implementation of the Sapphire GC algorithm [1]. It is the first on-the-fly, parallel, replication copying, garbage collector for Jikes RVM. The implementation provides innovations such as copying with hardware or software transactions, on-the-fly management of Java's reference types and simple, yet correct, lock-free management of volatile fields in a replicating collector. 
+
+The models directory above provides SPIN models [2] of critical components of this complicated and highly concurrent system.
+
+[1] Richard L. Hudson and J. Eliot B. Moss. 2003. Sapphire: Copying Garbage Collection Without Stopping the World.  Concurrency and Computation: Practice and Experience 15, 3–5 (2003), 223–261. https://doi.org/10.1002/cpe.712
+[2] G. J. Holzmann. 2004. The SPIN Model Checker: Primer and Reference Manual. Addison-Wesley.
+

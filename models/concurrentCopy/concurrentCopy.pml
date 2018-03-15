@@ -85,7 +85,7 @@ endmem:
   od
 }
 
-#define MUTATOR_FENCE \
+#define MUTATOR_MFENCE \
 atomic { \
   do \
     ::COMMIT_WRITE(mutator_queue, mutator_queue_count) \
@@ -93,7 +93,7 @@ atomic { \
   od \
 }
 
-#define COLLECTOR_FENCE \
+#define COLLECTOR_MFENCE \
 atomic { \
   do \
     ::COMMIT_WRITE(collector_queue, collector_queue_count) \
@@ -244,7 +244,7 @@ proctype collector()
   od;
 
 #ifndef NO_FENCE
-       COLLECTOR_FENCE
+       COLLECTOR_MFENCE
 #endif
 
   do
@@ -282,20 +282,20 @@ FAIL:
 	 ::(toValue == currentValue) -> i++
 	 ::else ->
            atomic { /* CAS */
-     	     COLLECTOR_FENCE;
+     	     COLLECTOR_MFENCE;
 	     COLLECTOR_READ(TO_SPACE_ADDR(i), tmp);
 	     if
 	       ::(currentValue == tmp) ->
 	         COLLECTOR_WRITE(TO_SPACE_ADDR(i), toValue)
 	       ::else -> i++
 	     fi;
-     	     COLLECTOR_FENCE;
+     	     COLLECTOR_MFENCE;
 	   }
        fi
     ::else -> i = 0; break 
   od;
 SUCCESS:
-  COLLECTOR_FENCE;
+  COLLECTOR_MFENCE;
   flipped = true;
 }
 

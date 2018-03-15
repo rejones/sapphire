@@ -70,15 +70,11 @@ chan collector_queue = [N_THREADS] of {byte, byte};
 
 /*   store buffer emulation */
 #define COMMIT_WRITE(q, count) \
-atomic { \
   (len(q) > 0) -> \
   q?a,v -> \
   printf("commit[%d] = %d\n", a, v); \
   shared[(a)-1] = v; \
-  count[(a)-1]--; \
-  a = 0; \
-  v = 0; \
-}
+  count[(a)-1]--
 
 active proctype memory() {
   byte a, v;

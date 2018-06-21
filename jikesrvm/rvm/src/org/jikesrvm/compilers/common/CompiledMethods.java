@@ -27,8 +27,10 @@ import org.jikesrvm.compilers.opt.runtimesupport.OptCompiledMethod;
 import org.jikesrvm.jni.JNICompiledMethod;
 import org.jikesrvm.runtime.Magic;
 import org.jikesrvm.runtime.Memory;
+import org.vmmagic.pragma.NonMovingAllocation;
 import org.vmmagic.pragma.Uninterruptible;
 import org.vmmagic.unboxed.Address;
+import org.vmmagic.unboxed.Offset;
 
 /**
  * Manage pool of compiled methods. <p>
@@ -245,7 +247,11 @@ public class CompiledMethods implements SizeConstants {
         } else {
           if (cm.isObsolete()) {
             // obsolete and not active on a thread stack: it's garbage!
-            setCompiledMethod(i, null);
+            int column = i >> LOG_ROW_SIZE;
+            CompiledMethod[] col = compiledMethods[column];
+            int index = i & ROW_MASK;
+            // avoid write barrier
+            Magic.setObjectAtOffset(col, Offset.fromIntZeroExtend(index << LOG_BYTES_IN_ADDRESS), null);
           }
         }
       }

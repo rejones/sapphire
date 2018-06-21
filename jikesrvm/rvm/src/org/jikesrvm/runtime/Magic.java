@@ -1114,6 +1114,7 @@ public final class Magic {
   /**
    * Wait for preceeding cache flush/invalidate instructions to
    * complete on all processors.
+   * May have the effect of a StoreLoad barrier (mfence on x86)
    */
   public static void sync() {
     if (VM.VerifyAssertions && VM.runningVM) {
@@ -1124,6 +1125,7 @@ public final class Magic {
   /**
    * Wait for all preceeding instructions to complete and discard any
    * prefetched instructions on this processor.
+   * May have the effect of a LoadStore or LoadLoad barrier (no-op on x86)
    */
   public static void isync() {
     if (VM.VerifyAssertions && VM.runningVM) {
@@ -1189,5 +1191,30 @@ public final class Magic {
       VM._assert(VM.NOT_REACHED);  // call site should have been hijacked by magic in compiler
     }
     return false;
+  }
+  
+  /**
+   * Begin a hardware memory transaction.
+   */
+  public static int htmBegin() {
+    if (VM.VerifyAssertions)
+      VM._assert(VM.NOT_REACHED); // call site should have been hijacked by magic in compiler
+    return 0;
+  }
+  
+  /**
+   * End a hardware memory transaction.
+   */
+  public static void htmEnd() {
+    if (VM.VerifyAssertions)
+      VM._assert(VM.NOT_REACHED); // call site should have been hijacked by magic in compiler
+  }
+  
+  /**
+   * Abort hardware memory transaction.
+   */
+  public static void htmAbort() {
+    if (VM.VerifyAssertions)
+      VM._assert(VM.NOT_REACHED); // call site should have been hijacked by magic in compiler
   }
 }

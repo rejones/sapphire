@@ -40,6 +40,7 @@ import org.jikesrvm.options.OptionSet;
 import org.jikesrvm.runtime.BootRecord;
 import org.jikesrvm.runtime.Magic;
 import org.mmtk.plan.CollectorContext;
+import org.mmtk.plan.Phase;
 import org.mmtk.plan.Plan;
 import org.mmtk.policy.Space;
 import org.mmtk.utility.Constants;
@@ -192,7 +193,7 @@ public final class MemoryManager implements HeapLayoutConstants, Constants {
     /* Make sure that during GC, we don't update on a possibly moving object.
        Such updates are dangerous because they can be lost.
      */
-    if (Plan.gcInProgressProper()) {
+    if (!Selected.Constraints.get().replicatingGC() && Plan.gcInProgressProper()) {
       ObjectReference ref = ObjectReference.fromObject(object);
       if (Space.isMovable(ref)) {
         VM.sysWriteln("GC modifying a potentially moving object via Java (i.e. not magic)");
@@ -404,12 +405,14 @@ public final class MemoryManager implements HeapLayoutConstants, Constants {
           return Plan.ALLOC_GCSPY;
         }
       }
-      if (isPrefix("Lorg/jikesrvm/mm/mmtk/ReferenceProcessor", clsBA)) {
+      // This code below forces [Lorg/vmmagic/unboxed/Address to be allocated in the replicated space
+      if (!Barriers.REPLICATING_GC && isPrefix("Lorg/jikesrvm/mm/mmtk/ReferenceProcessor", clsBA)) {
         if (traceAllocator) {
           VM.sysWriteln("DEFAULT");
         }
         return Plan.ALLOC_DEFAULT;
       }
+
       if (isPrefix("Lorg/mmtk/", clsBA) || isPrefix("Lorg/jikesrvm/mm/", clsBA)) {
         if (traceAllocator) {
           VM.sysWriteln("NONMOVING");
@@ -417,6 +420,11 @@ public final class MemoryManager implements HeapLayoutConstants, Constants {
         return Plan.ALLOC_NON_MOVING;
       }
       if (method.isNonMovingAllocation()) {
+        return Plan.ALLOC_NON_MOVING;
+      }
+      
+      // force objects marked allocation into a non replicated space
+      if (Barriers.REPLICATING_GC && method.isNonReplicatingAllocation()) {
         return Plan.ALLOC_NON_MOVING;
       }
     }
@@ -458,6 +466,26 @@ public final class MemoryManager implements HeapLayoutConstants, Constants {
         isPrefix("Lorg/jikesrvm/jni/JNIEnvironment;", typeBA)) {
       allocator = Plan.ALLOC_NON_MOVING;
     }
+
+    if (Barriers.REPLICATING_GC) {
+      if (type.isArrayType()) {
+        // arrays of unboxed values (i.e. AddressArray's) are accessed by Magic
+        // and must not be allocated in a replicated space
+        RVMType elementType = type.asArray().getElementType();
+        if (elementType.isUnboxedType()) {
+          allocator = Plan.ALLOC_NON_MOVING;
+        }
+      }
+      
+      if (type.containsUntracedFields() || type.containsVolatileFields()) {
+        allocator = Plan.ALLOC_NON_MOVING;
+      }
+
+      // accessed via Synchronisation.fetchAndAdd
+      if (isPrefix("Lorg/jikesrvm/adaptive/measurements/listeners/", typeBA)) {
+        allocator = Plan.ALLOC_NON_MOVING;
+      }
+    }
     return allocator;
   }
 
@@ -486,7 +514,7 @@ public final class MemoryManager implements HeapLayoutConstants, Constants {
     allocator = mutator.checkAllocator(org.jikesrvm.runtime.Memory.alignUp(size, MIN_ALIGNMENT), align, allocator);
     Address region = allocateSpace(mutator, size, align, offset, allocator, site);
     Object result = ObjectModel.initializeScalar(region, tib, size);
-    mutator.postAlloc(ObjectReference.fromObject(result), ObjectReference.fromObject(tib), size, allocator);
+    mutator.postAlloc(ObjectReference.fromObject(result), ObjectReference.fromObject(tib), size, allocator, align, offset);
     return result;
   }
 
@@ -552,7 +580,7 @@ public final class MemoryManager implements HeapLayoutConstants, Constants {
     allocator = mutator.checkAllocator(org.jikesrvm.runtime.Memory.alignUp(size, MIN_ALIGNMENT), align, allocator);
     Address region = allocateSpace(mutator, size, align, offset, allocator, site);
     Object result = ObjectModel.initializeArray(region, tib, numElements, size);
-    mutator.postAlloc(ObjectReference.fromObject(result), ObjectReference.fromObject(tib), size, allocator);
+    mutator.postAlloc(ObjectReference.fromObject(result), ObjectReference.fromObject(tib), size, allocator, align, offset);
     return result;
   }
 
@@ -1065,7 +1093,22 @@ public final class MemoryManager implements HeapLayoutConstants, Constants {
   public static boolean gcInProgress() {
     return Plan.gcInProgress();
   }
-
+  
+  /** @return True if current GC was user triggered */
+  public static boolean gcIsUserTriggered() {
+    return Plan.isUserTriggeredCollection();
+  }
+  
+  /** @return True if current GC is internally triggered */
+  public static boolean gcIsInternallyTriggered() {
+    return Plan.isInternalTriggeredCollection();
+  }
+  
+  /** @return True if current GC is on-the-fly */
+  public static boolean gcIsOnTheFly() {
+    return Plan.controlCollectorContext.isOnTheFlyCollection();
+  }
+  
   /**
    * Start the GCspy server
    */
@@ -1162,5 +1205,53 @@ public final class MemoryManager implements HeapLayoutConstants, Constants {
     return new int[n];
   }
 
+  /***********************************************************************
+   *
+   * Address based hashcode
+   */
+
+  /**
+   * Prepare the given object for getting its hashcode.  Make its hash state HASHED
+   * in the typical implementation.
+   *
+   * @param obj The object of which we will take a hashcode
+   * @return The copy of the object from whose address the VM should generate the hashcode.
+   */
+  public static ObjectReference hashByAddress(ObjectReference obj) {
+    return Selected.Mutator.get().hashByAddress(obj);
+  }
+
+  /***********************************************************************
+  *
+  * Status word
+  */
+
+  public static Object metaLockObject(Object o) {
+    ObjectReference r = ObjectReference.fromObject(o);
+    ObjectReference rr = Selected.Mutator.get().metaLockObject(r);
+    return rr.toObject();
+  }
+
+  public static void metaUnlockObject(Object o) {
+    ObjectReference r = ObjectReference.fromObject(o);
+    Selected.Mutator.get().metaUnlockObject(r);
+  }
+  
+  /***********************************************************************
+  *
+  * Debugging
+  */
+  
+  public static final boolean hasDebuggingEnabled() {
+    return org.mmtk.vm.VM.DEBUG;
+  }
+  
+  public static org.jikesrvm.mm.mmtk.Debug getDebugging() {
+    return (org.jikesrvm.mm.mmtk.Debug) org.mmtk.vm.VM.debugging;
+  }
+  
+  public static String getGCPhaseName(short phaseId) {
+    return Phase.getName(phaseId);
+  } 
 }
 

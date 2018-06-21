@@ -12,7 +12,10 @@
  */
 package org.mmtk.plan;
 
+import org.mmtk.policy.Space;
+import org.mmtk.utility.Log;
 import org.mmtk.utility.deque.WriteBuffer;
+import org.mmtk.vm.VM;
 import org.vmmagic.pragma.*;
 import org.vmmagic.unboxed.*;
 
@@ -72,6 +75,13 @@ public final class TraceWriteBuffer extends TransitiveClosure {
   @Override
   @Inline
   public void processNode(ObjectReference object) {
+    if (VM.VERIFY_ASSERTIONS) {
+      if (!Space.isMappedObject(object)) {
+        Log.write("Have been asked to process: ");
+        Log.writeln(object);
+        VM.assertions._assert(Space.isMappedObject(object));
+      }
+    }
     buffer.insert(object.toAddress());
   }
 }

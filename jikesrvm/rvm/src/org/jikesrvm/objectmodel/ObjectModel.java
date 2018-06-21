@@ -17,12 +17,15 @@ import org.jikesrvm.VM;
 import org.jikesrvm.SizeConstants;
 import org.jikesrvm.classloader.RVMArray;
 import org.jikesrvm.classloader.RVMClass;
+import org.jikesrvm.classloader.RVMField;
 import org.jikesrvm.classloader.RVMType;
 import org.jikesrvm.mm.mminterface.AlignmentEncoding;
+import org.jikesrvm.mm.mminterface.DebugUtil;
 import org.jikesrvm.mm.mminterface.MemoryManager;
 import org.jikesrvm.runtime.Magic;
 import org.jikesrvm.scheduler.Lock;
 import org.jikesrvm.scheduler.RVMThread;
+import org.mmtk.plan.TraceLocal;
 import org.vmmagic.pragma.Entrypoint;
 import org.vmmagic.pragma.Inline;
 import org.vmmagic.pragma.Interruptible;
@@ -219,7 +222,12 @@ public class ObjectModel implements JavaHeaderConstants, SizeConstants {
     TIB tib = getTIB(obj);
     RVMType type = tib.getType();
     if (type.isClassType()) {
-      return getObjectEndAddress(obj, type.asClass());
+      if (!type.getTypeRef().isRuntimeTable())
+        return getObjectEndAddress(obj, type.asClass());
+      else {
+        int numElements = Magic.getArrayLength(obj);
+        return getObjectEndAddress(obj, RVMType.AddressArrayType, numElements);
+      }
     } else {
       int numElements = Magic.getArrayLength(obj);
       return getObjectEndAddress(obj, type.asArray(), numElements);
@@ -400,6 +408,14 @@ public class ObjectModel implements JavaHeaderConstants, SizeConstants {
    */
   public static Object moveObject(Address toAddress, Object fromObj, int numBytes, RVMClass type) {
     return JavaHeader.moveObject(toAddress, fromObj, numBytes, type);
+  }
+
+  public static Object copyScalarHeader(Address toAddress, Object fromObj, TIB tib, int numBytes) {
+    return JavaHeader.copyScalarHeader(toAddress, fromObj, tib, numBytes);
+  }
+
+  public static Object copyArrayHeader(Address toAddress, Object fromObj, TIB tib, int elements, int numBytes) {
+    return JavaHeader.copyArrayHeader(toAddress, fromObj, tib, elements, numBytes);
   }
 
   /**
@@ -897,6 +913,12 @@ public class ObjectModel implements JavaHeaderConstants, SizeConstants {
     VM.sysWrite(Magic.objectAsAddress(getTIB(ref)));
     JavaHeader.dumpHeader(ref);
     MiscHeader.dumpHeader(ref);
+    for (int i = 0; i < GC_HEADER_BYTES; i += BYTES_IN_WORD) {
+      VM.sysWrite(" GC+");
+      VM.sysWrite(i);
+      VM.sysWrite("=");
+      VM.sysWriteHex(Magic.getWordAtOffset(ref, GC_HEADER_OFFSET.plus(i)).toAddress());
+    }
   }
 
   /**
@@ -919,6 +941,22 @@ public class ObjectModel implements JavaHeaderConstants, SizeConstants {
   @Interruptible
   public static void baselineEmitLoadTIB(Assembler asm, int dest, int object) {
     JavaHeader.baselineEmitLoadTIB(asm, dest, object);
+  }
+
+  /** Tell if o is hashed or not.
+   * @param o
+   * @return True if o is not hashed.  False if o is hashed regardless of whether it is moved or not.
+   */
+  public static boolean isUnhashed(ObjectReference o) {
+    return JavaHeader.isUnhashed(o);
+  }
+
+  /**
+   * Make the object in the hashed state.  If it has already been hashed, do nothing.
+   * @param o
+   */
+  public static void setHashed(ObjectReference o) {
+    JavaHeader.setHashed(o);
   }
 }
 

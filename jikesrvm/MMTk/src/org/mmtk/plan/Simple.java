@@ -53,6 +53,7 @@ public abstract class Simple extends Plan implements Constants {
   public static final short STACK_ROOTS         = Phase.createSimple("stacks");
   public static final short ROOTS               = Phase.createSimple("root");
   public static final short CLOSURE             = Phase.createSimple("closure", scanTime);
+  public static final short SOFT_REFS_RETAIN    = Phase.createSimple("retain-soft-ref", refTypeTime);
   public static final short SOFT_REFS           = Phase.createSimple("soft-ref", refTypeTime);
   public static final short WEAK_REFS           = Phase.createSimple("weak-ref", refTypeTime);
   public static final short FINALIZABLE         = Phase.createSimple("finalize", finalizeTime);
@@ -126,9 +127,10 @@ public abstract class Simple extends Plan implements Constants {
    * Complete closure including reference types and finalizable objects.
    */
   protected static final short refTypeClosurePhase = Phase.createComplex("refType-closure", null,
-      Phase.scheduleCollector  (SOFT_REFS),
+      Phase.scheduleCollector  (SOFT_REFS_RETAIN),
       Phase.scheduleGlobal     (CLOSURE),
       Phase.scheduleCollector  (CLOSURE),
+      Phase.scheduleCollector  (SOFT_REFS),
       Phase.scheduleCollector  (WEAK_REFS),
       Phase.scheduleCollector  (FINALIZABLE),
       Phase.scheduleGlobal     (CLOSURE),
@@ -262,6 +264,16 @@ public abstract class Simple extends Plan implements Constants {
   }
 
   /**
+   * Perform a (global) unpreemptible collection phase.
+   */
+  @Unpreemptible
+  public void unpreemptibleCollectionPhase(short phaseId) {
+    Log.write("Unpreemptible Global phase "); Log.write(Phase.getName(phaseId));
+    Log.writeln(" not handled.");
+    VM.assertions.fail("Unpreemptible Global phase not handled!");
+  }
+
+  /*
    * Update the nursery zeroing approach based on option settings.
    *
    * @param nurserySpace The space to apply the changes to.

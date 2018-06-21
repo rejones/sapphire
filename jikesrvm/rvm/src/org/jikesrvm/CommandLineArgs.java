@@ -20,9 +20,10 @@ import org.jikesrvm.compilers.baseline.BaselineCompiler;
 import org.jikesrvm.compilers.baseline.BaselineOptions;
 import org.jikesrvm.compilers.common.RuntimeCompiler;
 import org.jikesrvm.mm.mminterface.MemoryManager;
-
 import static org.jikesrvm.runtime.SysCall.sysCall;
 import org.jikesrvm.scheduler.RVMThread;
+import org.jikesrvm.scheduler.TestThread;
+import org.vmmagic.pragma.NonReplicatingAllocation;
 
 /**
  * Command line option processing iwth arbitrary prefix support.
@@ -79,7 +80,9 @@ public class CommandLineArgs {
     BOOTCLASSPATH_P_ARG,
     BOOTCLASSPATH_A_ARG,
     BOOTSTRAP_CLASSES_ARG,
-    AVAILABLE_PROCESSORS_ARG
+    AVAILABLE_PROCESSORS_ARG,
+    TEST_HELP_ARG,
+    TEST_ARG
   }
 
   /** Represent a single command line prefix */
@@ -208,6 +211,10 @@ public class CommandLineArgs {
                                             new Prefix("-X:vm:help$", PrefixType.HELP_ARG),
                                             new Prefix("-X:vm$", PrefixType.HELP_ARG),
                                             new Prefix("-X:vm:", PrefixType.ARG),
+                                            
+                                            new Prefix("-X:test:help$", PrefixType.TEST_HELP_ARG),
+                                            new Prefix("-X:test$", PrefixType.TEST_HELP_ARG),
+                                            new Prefix("-X:test:", PrefixType.TEST_ARG),
 
                                             /* Silently ignored */
                                             new Prefix("-Xverify", PrefixType.VERIFY_ARG),
@@ -651,6 +658,16 @@ public class CommandLineArgs {
             VM.sysExit(VM.EXIT_STATUS_BOGUS_COMMAND_LINE_ARG);
           }
           break;
+          
+          // ----------------------------------------------------
+          // Configure test thread class
+          // ----------------------------------------------------
+        case TEST_HELP_ARG:
+          TestThread.printHelp("-X:test:");
+          break;
+        case TEST_ARG:
+          TestThread.processCommandLineArg("-X:test:", arg);
+          break;
 
           // -------------------------------------------------------------------
           // Other arguments to the core VM
@@ -825,25 +842,21 @@ public class CommandLineArgs {
     // reallocation really soon.
     int buflen = 512;
 
-    byte[] buf;                 // gets freed with the class instance.
-
-    ArgReader() {
-      buf = new byte[buflen];
-    }
-
     /** Read argument # @param i
      * Assume arguments are encoded in the platform's
      * "default character set". */
     @SuppressWarnings({"deprecation"})
+    @NonReplicatingAllocation
     String getArg(int i) {
       int cnt;
+      byte[] buf = new byte[buflen];  // buf needs to allocated in Non replicated space to ensure correctness
       for (; ;) {
         cnt = sysArg(i, buf);
         if (cnt >= 0) {
           break;
         }
         buflen += 1024;
-        buf = new byte[buflen];
+        buf = new byte[buflen]; // buf needs to allocated in Non replicated space to ensure correctness
       }
       if (VM.VerifyAssertions) VM._assert(cnt != -1);
       /*
@@ -868,7 +881,9 @@ public class CommandLineArgs {
       return new String(buf, 0, 0, cnt);
     }
 
+    @NonReplicatingAllocation
     int numArgs() {
+      byte[] buf = new byte[buflen];  // buf needs to allocated in Non replicated space to ensure correctness
       return sysArg(-1, buf);
     }
   }

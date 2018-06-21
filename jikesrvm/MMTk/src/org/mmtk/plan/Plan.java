@@ -129,6 +129,7 @@ public abstract class Plan implements Constants {
   public static final LargeObjectSpace largeCodeSpace = USE_CODE_SPACE ? new LargeObjectSpace("lg-code", VMRequest.discontiguous()) : null;
 
   public static int pretenureThreshold = Integer.MAX_VALUE;
+  public static int stwTrigger = 0;
 
   /* Space descriptors */
   public static final int IMMORTAL = immortalSpace.getDescriptor();
@@ -152,6 +153,8 @@ public abstract class Plan implements Constants {
   /** Default collector context */
   protected final Class<? extends ParallelCollector> defaultCollectorContext;
 
+  public static long startTime; // used by heap growth manager
+
   /****************************************************************************
    * Constructor.
    */
@@ -172,6 +175,7 @@ public abstract class Plan implements Constants {
     Options.variableSizeHeap = new VariableSizeHeap();
     Options.eagerMmapSpaces = new EagerMmapSpaces();
     Options.sanityCheck = new SanityCheck();
+    Options.stwTrigger = new STWTrigger();
     Options.debugAddress = new DebugAddress();
     Options.perfEvents = new PerfEvents();
     Options.useReturnBarrier = new UseReturnBarrier();
@@ -230,6 +234,7 @@ public abstract class Plan implements Constants {
     if (Options.verbose.getValue() > 0) Stats.startAll();
     if (Options.eagerMmapSpaces.getValue()) Space.eagerlyMmapMMTkSpaces();
     pretenureThreshold = (int) ((Options.nurserySize.getMaxNursery()<<LOG_BYTES_IN_PAGE) * Options.pretenureThresholdFraction.getValue());
+    stwTrigger = Options.stwTrigger.getValue();
   }
 
   /**
@@ -330,6 +335,11 @@ public abstract class Plan implements Constants {
    * @param phaseId The unique id of the phase to perform.
    */
   public abstract void collectionPhase(short phaseId);
+
+  /**
+   * Perform a (global) unpreemptible collection phase.
+   */
+  public abstract void unpreemptibleCollectionPhase(short phase);
 
   /**
    * Replace a phase.
@@ -619,6 +629,10 @@ public abstract class Plan implements Constants {
     controlCollectorContext.request();
   }
 
+  public static void triggerOnTheFlyCollectionRequest() {
+    controlCollectorContext.requestOnTheFlyCollection();
+  }
+
   /**
    * Reset collection state information.
    */
@@ -841,6 +855,16 @@ public abstract class Plan implements Constants {
     return slot.loadObjectReference();
   }
 
+  @Inline
+  public ObjectReference prepareObjectReference(Address slot) {
+    return slot.loadObjectReference();
+  }
+
+  @Inline
+  public boolean attemptObjectReference(Address slot, ObjectReference old, ObjectReference value) {
+    return slot.attempt(old, value);
+  }
+  
   /****************************************************************************
    * Collection.
    */
@@ -882,6 +906,14 @@ public abstract class Plan implements Constants {
       }
     }
 
+    if (onTheFlyCollectionRequired(space)) {
+      /* On-the-fly collection is always async collection. */
+      logPoll(space, "Triggering on-the-fly collection");
+      triggerOnTheFlyCollectionRequest();
+      logPoll(space, "triggered");
+      return false;
+    }
+
     return false;
   }
 
@@ -892,7 +924,9 @@ public abstract class Plan implements Constants {
    */
   protected void logPoll(Space space, String message) {
     if (Options.verbose.getValue() >= 5) {
-      Log.write("  [POLL] ");
+      Log.write("  [POLL] triggered by thread #");
+      Log.write(VM.activePlan.mutator().getId());
+      Log.write(" ");
       Log.write(space.getName());
       Log.write(": ");
       Log.writeln(message);
@@ -909,7 +943,12 @@ public abstract class Plan implements Constants {
    */
   protected boolean collectionRequired(boolean spaceFull, Space space) {
     boolean stressForceGC = stressTestGCRequired();
-    boolean heapFull = getPagesReserved() > getTotalPages();
+    boolean heapFull;
+    if (stwTrigger > 0) {
+        heapFull = getPagesReserved() > stwTrigger;
+    } else {
+        heapFull = getPagesReserved() > getTotalPages();
+    }
 
     return spaceFull || stressForceGC || heapFull;
   }
@@ -921,6 +960,16 @@ public abstract class Plan implements Constants {
    * @return <code>true</code> if a collection is requested by the plan.
    */
   protected boolean concurrentCollectionRequired() {
+    return false;
+  }
+
+  /**
+   * This method controls the triggering of an atomic phase of an on-the-fly
+   * collection. It is called periodically during allocation.
+   *
+   * @return True if a collection is requested by the plan.
+   */
+  protected boolean onTheFlyCollectionRequired(Space space) {
     return false;
   }
 

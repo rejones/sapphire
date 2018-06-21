@@ -145,6 +145,9 @@ extern "C" void sysMonitorTimedWait(Word, long long);
 extern "C" void sysMonitorWait(Word);
 extern "C" void sysMonitorBroadcast(Word);
 
+static void* checkMalloc(int);
+static void checkFree(void*);
+
 // #define DEBUG_SYS
 // #define DEBUG_THREAD
 
@@ -875,6 +878,54 @@ sysNanoSleep(long long howLongNanos)
 }
 
 
+
+extern "C" int
+sysGetRUsage(int who, int *result)
+{
+    struct rusage usage;
+    int n, ret;
+    
+    switch (who) {
+        case 0: who = RUSAGE_SELF; break;
+        #ifdef RUSAGE_THREAD
+        case 1: who = RUSAGE_THREAD; break;
+        #endif
+        case -1: who = RUSAGE_CHILDREN; break;
+        default:
+            who = RUSAGE_SELF;
+            break;
+    }
+
+    ret = getrusage(who, &usage);
+
+    n = 0;
+    result[n++] = (int) usage.ru_utime.tv_sec;    /*  0: user time used */
+    result[n++] = (int) usage.ru_utime.tv_usec;
+    result[n++] = (int) usage.ru_stime.tv_sec;    /*  2: system time used */
+    result[n++] = (int) usage.ru_stime.tv_usec;           
+    result[n++] = (int) usage.ru_maxrss;          /*  4: max resident set size */
+    result[n++] = (int) usage.ru_ixrss;           /*  5: integral shared text memory size */
+    result[n++] = (int) usage.ru_idrss;           /*  6: integral unshared data size */
+    result[n++] = (int) usage.ru_isrss;           /*  7: integral unshared stack size */
+    result[n++] = (int) usage.ru_minflt;          /*  8: page reclaims */
+    result[n++] = (int) usage.ru_majflt;          /*  9: page faults */
+    result[n++] = (int) usage.ru_nswap;           /* 10: swaps */
+    result[n++] = (int) usage.ru_inblock;         /* 11: block input operations */
+    result[n++] = (int) usage.ru_oublock;         /* 12: block output operations */
+    result[n++] = (int) usage.ru_msgsnd;          /* 13: messages sent */
+    result[n++] = (int) usage.ru_msgrcv;          /* 14: messages received */
+    result[n++] = (int) usage.ru_nsignals;        /* 15: signals received */
+    result[n++] = (int) usage.ru_nvcsw;           /* 16: voluntary context switches */
+    result[n++] = (int) usage.ru_nivcsw;          /* 17: involuntary context switches */
+    /*
+    for (n = 0; n <= 17; ++n) {
+        fprintf (stderr, "result[%02d] = %ld\n", n, (int) result[n]);
+    }
+    */
+
+    return ret;
+}
+
 //-----------------------//
 // Processor operations. //
 //-----------------------//
@@ -978,7 +1029,7 @@ sysThreadCreate(Address tr, Address ip, Address fp)
 
     // create arguments
     //
-    sysThreadArguments = new Address[3];
+    sysThreadArguments = (Address*) checkMalloc(sizeof(Address) * 3);
     sysThreadArguments[0] = tr;
     sysThreadArguments[1] = ip;
     sysThreadArguments[2] = fp;
@@ -1086,7 +1137,7 @@ sysThreadStartup(void *args)
     char *stackBuf;
 
     memset (&stack, 0, sizeof stack);
-    stack.ss_sp = stackBuf = new char[SIGSTKSZ];
+    stack.ss_sp = stackBuf = (char*) checkMalloc(sizeof(char) * SIGSTKSZ);
     stack.ss_flags = 0;
     stack.ss_size = SIGSTKSZ;
     if (sigaltstack (&stack, 0)) {
@@ -1096,18 +1147,18 @@ sysThreadStartup(void *args)
 
     Address tr       = ((Address *)args)[0];
 
-    jmp_buf *jb = (jmp_buf*)malloc(sizeof(jmp_buf));
+    jmp_buf *jb = (jmp_buf*)checkMalloc(sizeof(jmp_buf));
     if (setjmp(*jb)) {
 	// this is where we come to terminate the thread
 #ifdef RVM_FOR_HARMONY
         hythread_detach(NULL);
 #endif
-	free(jb);
+	checkFree(jb);
 	*(int*)(tr + RVMThread_execStatus_offset) = RVMThread_TERMINATED;
 	
 	stack.ss_flags = SS_DISABLE;
 	sigaltstack(&stack, 0);
-	delete[] stackBuf;
+	checkFree(stackBuf);
     } else {
         setThreadLocal(TerminateJmpBufKey, (void*)jb);
 	
@@ -1194,7 +1245,7 @@ sysSetupHardwareTrapHandler()
     stack_t stack;
 
     memset (&stack, 0, sizeof stack);
-    stack.ss_sp = new char[SIGSTKSZ];
+    stack.ss_sp = (char*) checkMalloc(sizeof(char) * SIGSTKSZ);
 
     stack.ss_size = SIGSTKSZ;
     if (sigaltstack (&stack, 0)) {
@@ -1369,7 +1420,7 @@ sysMonitorCreate()
     hythread_monitor_t monitor;
     hythread_monitor_init_with_name(&monitor, 0, NULL);
 #else
-    vmmonitor_t *monitor = new vmmonitor_t;
+    vmmonitor_t *monitor = (vmmonitor_t*) checkMalloc(sizeof(vmmonitor_t));
     pthread_mutex_init(&monitor->mutex, NULL);
     pthread_cond_init(&monitor->cond, NULL);
 #endif
@@ -1385,7 +1436,7 @@ sysMonitorDestroy(Word _monitor)
     vmmonitor_t *monitor = (vmmonitor_t*)_monitor;
     pthread_mutex_destroy(&monitor->mutex);
     pthread_cond_destroy(&monitor->cond);
-    delete monitor;
+    checkFree(monitor);
 #endif
 }
 
@@ -1684,16 +1735,28 @@ sysMemmove(void *dst, const void *src, Extent cnt)
 
 int inRVMAddressSpace(Address a);
 
-// Allocate memory.
-//
-extern "C" void *
-sysMalloc(int length)
+static void*
+checkMalloc(int length)
 {
     void *result=malloc(length);
     if (inRVMAddressSpace((Address)result)) {
       fprintf(stderr,"malloc returned something that is in RVM address space: %p\n",result);
     }
     return result;
+}
+
+static void
+checkFree(void* mem)
+{
+    free(mem);
+}
+
+// Allocate memory.
+//
+extern "C" void *
+sysMalloc(int length)
+{
+    return checkMalloc(length);
 }
 
 extern "C" void *
@@ -1707,7 +1770,7 @@ sysCalloc(int length)
 extern "C" void
 sysFree(void *location)
 {
-    free(location);
+    checkFree(location);
 }
 
 // Zero a range of memory with non-temporal instructions on x86

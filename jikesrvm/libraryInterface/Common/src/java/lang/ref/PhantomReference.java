@@ -14,6 +14,7 @@ package java.lang.ref;
 
 import org.jikesrvm.mm.mminterface.MemoryManager;
 import org.vmmagic.pragma.ReferenceFieldsVary;
+import org.vmmagic.pragma.Uninterruptible;
 
 /**
  * Implementation of java.lang.ref.PhantomReference for JikesRVM.
@@ -24,6 +25,12 @@ public class PhantomReference<T> extends Reference<T> {
   public PhantomReference(T referent, ReferenceQueue<T> q) {
     super(referent, q);
     MemoryManager.addPhantomReference(this,referent);
+  }
+
+  @Override
+  @Uninterruptible
+  public boolean isSoft() {
+    return false;
   }
 
   /**

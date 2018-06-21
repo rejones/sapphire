@@ -27,6 +27,7 @@ import org.jikesrvm.compilers.common.CompiledMethod;
 import org.jikesrvm.objectmodel.JavaHeaderConstants;
 import org.jikesrvm.objectmodel.ObjectModel;
 import org.jikesrvm.runtime.Magic;
+import org.mmtk.plan.Plan;
 import org.mmtk.plan.TransitiveClosure;
 import org.vmmagic.pragma.Inline;
 import org.vmmagic.pragma.Interruptible;
@@ -193,7 +194,17 @@ public final class SpecializedScanMethod extends SpecializedMethod implements Si
   /** Fallback */
   public static void fallback(Object object, TransitiveClosure trace) {
     ObjectReference objectRef = ObjectReference.fromObject(object);
+    if (VM.VerifyAssertions) {
+      VM._assert(object != null);
+      if (!MemoryManager.validRef(objectRef)) {
+        VM.sysWriteln("object reference is ", Plan.nonMovingSpace.isLive(objectRef) ? "live" : "dead");
+        VM._assert(false);
+      }
+    }
     RVMType type = ObjectModel.getObjectType(objectRef.toObject());
+    if (VM.VerifyAssertions) {
+      VM._assert(type != null);
+    }
     int[] offsets = type.getReferenceOffsets();
     if (offsets != REFARRAY_OFFSET_ARRAY) {
       if (VM.VerifyAssertions) VM._assert(type.isClassType() || (type.isArrayType() && !type.asArray().getElementType().isReferenceType()));

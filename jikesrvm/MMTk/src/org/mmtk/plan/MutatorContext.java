@@ -112,7 +112,7 @@ public abstract class MutatorContext implements Constants {
   protected final Log log = new Log();
 
   /** Per-mutator allocator into the immortal space */
-  protected final BumpPointer immortal = new ImmortalLocal(Plan.immortalSpace);
+  protected final ImmortalLocal immortal = new ImmortalLocal(Plan.immortalSpace);
 
   /** Per-mutator allocator into the large object space */
   protected final LargeObjectLocal los = new LargeObjectLocal(Plan.loSpace);
@@ -214,6 +214,11 @@ public abstract class MutatorContext implements Constants {
    * @param allocator The allocator number to be used for this allocation
    */
   @Inline
+  public void postAlloc(ObjectReference ref, ObjectReference typeRef, int bytes, int allocator, int align, int offset) {
+    this.postAlloc(ref, typeRef, bytes, allocator);
+  }
+
+  @Inline
   public void postAlloc(ObjectReference ref, ObjectReference typeRef,
       int bytes, int allocator) {
     switch (allocator) {
@@ -260,11 +265,54 @@ public abstract class MutatorContext implements Constants {
     return null;
   }
 
+  /***********************************************************************
+   *
+   * Address based hashcode
+   */
+
+  /**
+   * Prepare the given object for getting its hashcode.  Make its hash state HASHED
+   * in the typical implementation.
+   *
+   * @param obj The object of which we will take a hashcode
+   * @return The copy of the object from whose address the VM should generate the hashcode.
+   */
+  public ObjectReference hashByAddress(ObjectReference obj) {
+    if (VM.objectModel.isUnhashed(obj))
+      VM.objectModel.setHashed(obj);
+    return obj;
+  }
+
+  /**
+   * Prepare for read/write to status word.
+   * @param obj The object whose status word we attmpt to read/write
+   * @return The copy of the object which we can contact
+   */
+  public ObjectReference metaLockObject(ObjectReference obj) {
+    return obj;
+  }
+
+  public void metaUnlockObject(ObjectReference obj) {
+  }
+
   /****************************************************************************
    *
    * Write and read barriers. By default do nothing, override if
    * appropriate.
    */
+
+  /**
+   * Read a reference type. In a concurrent collector this may
+   * involve adding the referent to the marking queue.
+   *
+   * @param referent The referent being read.
+   * @param isSoft True if the reference is a SoftReference, false if a WeakReference
+   * @return The new referent.
+   */
+  @Inline
+  public ObjectReference javaLangReferenceReadBarrier(ObjectReference referent, boolean isSoft) {
+    return javaLangReferenceReadBarrier(referent);
+  }
 
   /**
    * Read a reference type. In a concurrent collector this may
@@ -280,7 +328,7 @@ public abstract class MutatorContext implements Constants {
     if (VM.VERIFY_ASSERTIONS) VM.assertions._assert(false);
     return ObjectReference.nullReference();
   }
-
+  
   /**
    * Write a boolean. Take appropriate write barrier actions.<p>
    *
@@ -892,6 +940,22 @@ public abstract class MutatorContext implements Constants {
   }
 
   /**
+   * Write a Word during GC into toSpace. Take appropriate write barrier actions.
+   * <p>
+   * @param src The object into which the new reference will be stored
+   * @param slot The address into which the new reference will be stored.
+   * @param value The value of the new Word
+   * @param metaDataA A value that assists the host VM in creating a store
+   * @param metaDataB A value that assists the host VM in creating a store
+   * @param mode The context in which the store occurred
+   */
+  public void wordWriteDuringGC(ObjectReference src, Address slot, Word value, Word metaDataA, Word metaDataB, int mode) {
+    // Either: write barriers are used and this is overridden, or
+    // write barriers are not used and this is never called
+    if (VM.VERIFY_ASSERTIONS) VM.assertions._assert(false);
+  }
+
+  /**
    * Write an Address. Take appropriate write barrier actions.<p>
    *
    * <b>By default do nothing, override if appropriate.</b>
@@ -1213,6 +1277,33 @@ public abstract class MutatorContext implements Constants {
     // write barriers are not used and this is never called
     if (VM.VERIFY_ASSERTIONS) VM.assertions._assert(false);
     return false;
+  }
+
+  public boolean objectReferenceCompare(ObjectReference refA, ObjectReference refB) {
+    if (VM.VERIFY_ASSERTIONS) VM.assertions._assert(false);
+    return false;
+  }
+
+  /**
+   * Write a Address during GC into toSpace. Take appropriate write barrier actions.
+   * <p>
+   * @param src The object into which the new reference will be stored
+   * @param slot The address into which the new reference will be stored.
+   * @param value The value of the new Address
+   * @param metaDataA A value that assists the host VM in creating a store
+   * @param metaDataB A value that assists the host VM in creating a store
+   * @param mode The context in which the store occurred
+   */
+  public void addressWriteDuringGC(ObjectReference src, Address slot, Address value, Word metaDataA, Word metaDataB, int mode) {
+    if (VM.VERIFY_ASSERTIONS) VM.assertions._assert(false);
+  }
+
+  public void addressWriteToReferenceTable(ObjectReference src, Address slot, Address value, Word metaDataA, Word metaDataB, int mode) {
+    if (VM.VERIFY_ASSERTIONS) VM.assertions._assert(false);
+  }
+  
+  public void javaLangReferenceWriteBarrier(ObjectReference reference, Address slot, ObjectReference referent, Word metaDataA, Word metaDataB, int mode) {
+    if (VM.VERIFY_ASSERTIONS) VM.assertions._assert(false);
   }
 
   /**

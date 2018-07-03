@@ -1,0 +1,51 @@
+This Dockerfile creates an image to reproduce our experimental results.
+
+1. Preparation -- preload files
+
+  The following files are required in the building process of JikesRVM.
+    asm-3.0.jar
+    checkstyle-4.3.tar.gz
+    classpath-0.97.2.tar.gz
+    ecj-3.2.jar
+    hamcrest-all-1.3.0RC2.jar
+    junit4.10.zip
+    mockito1.9.5-rc1.jar
+
+  DaCapo benchmark suites are also required to reproduce our experimental
+  results.
+    dacapo-2006-10-MR2.jar
+    dacapo-9.12-bach.jar
+
+  Please place these files in the externals directory.
+
+2. Preparation -- copy source files.
+
+  Copy the source tree of JikesRVM in the sapphire directory.
+
+  % cp -r ../jikesrvm sapphire/
+
+3. Run the container
+
+  Build a docker image from this Dockerfile.
+
+  % docker build -t sapphire .
+
+  Then, a container of the created image.
+
+  % docker run -ti sapphire
+
+4. Execute DaCapo benchmarks with JikesRVM+Sapphire
+
+  The docker build process in 2. builds JikesRVM in the /opt/sapphire/jikesrvm
+  directory. We provide a script /opt/sapphire/benchmark to execute JikesRVM
+  with the options that we used in our paper. This script is expected to
+  be executed in the /opt/sapphire directory.
+  
+  % cd /opt/sapphire
+
+  To execute pmd in DaCapo 9.12, for example,
+
+  % ./benchmark -t pmd9 jikesrvm
+
+  Executing this script without command line parameters displays
+  all options and the list of available benchmark programs.

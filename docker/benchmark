@@ -1,0 +1,137 @@
+#!/bin/bash
+
+
+TOP=/opt
+EXCESSIVE_GC=false
+CONFIG_NAME=OptAdaptiveOTFSapphire
+EXPERIMENT_TAG=test
+
+mode=error
+
+while :; do
+    case "$1" in
+	-t) mode=test;  shift;;
+	-b) mode=build; shift;;
+	-e) mode=exec;  shift;;
+	-p) mode=print;  shift;;
+	-excessive-gc)
+	    shift
+	    EXCESSIVE_GC=true
+	    ;;
+	-config)
+	    shift
+	    CONFIG_NAME=$1; shift
+	    ;;
+	-tag)
+	    shift
+	    TAG=$1; shift
+	    ;;
+	-top)
+	    shift
+	    TOP=$1; shift
+	    ;;
+	-*)
+	    mode=error
+	    break
+	    ;;
+	*)  break
+	    ;;
+    esac
+done
+
+BENCHMARKS=$TOP/sapphire/benchmarks.txt
+
+if [ $mode = error ]; then
+    echo "$0 (-b|-e|-t|-p) [options] benchmark rvmdir"
+    echo " -b: build compiler replay"
+    echo " -e: execute with compiler replay"
+    echo " -t: execute without compiler replay"
+    echo " -p: print command line"
+    echo " options:"
+    echo "   -excessive-gc"
+    echo "   -config config-name"
+    echo "   -top dir"
+    if [ -f $BENCHMARKS ]; then
+	echo " available benchmarks:"
+	awk '!/^#/ {print "   "$1}' $BENCHMARKS
+    fi
+    exit 1
+fi
+
+BENCH=$1; shift
+RVM_TAG=$1; shift
+arch=${CONFIG_NAME}_x86_64-linux
+
+RVM_DIR=$TOP/sapphire/$RVM_TAG
+AOS_DIR=$TOP/sapphire/aos_cache
+DACAPO6=$TOP/externals/dacapo-2006-10-MR2.jar
+DACAPO9=$TOP/externals/dacapo-9.12-bach.jar
+
+bench_name=${BENCH%[69]}
+bench_version=${BENCH#$bench_name}
+if [ x$bench_version = x6 ]; then
+  DACAPO=$DACAPO6
+else
+  DACAPO="$DACAPO9 -t 32"
+fi
+
+
+AOS_FILE_BASE=${AOS_DIR}/${EXPERIMENT_TAG}_${RVM_TAG}_${BENCH}
+
+AOS_BUILD=""
+AOS_BUILD="$AOS_BUILD -X:aos:enable_advice_generation=true"
+AOS_BUILD="$AOS_BUILD -X:base:profile_edge_counters=true"
+AOS_BUILD="$AOS_BUILD -X:aos:final_report_level=2"
+AOS_BUILD="$AOS_BUILD -X:aos:cafo=${AOS_FILE_BASE}.ca"
+AOS_BUILD="$AOS_BUILD -X:base:profile_edge_counter_file=${AOS_FILE_BASE}.ec"
+AOS_BUILD="$AOS_BUILD -X:aos:dcfo=${AOS_FILE_BASE}.dc"
+
+AOS_EXEC=""
+AOS_EXEC="$AOS_EXEC -X:aos:initial_compiler=base"
+AOS_EXEC="$AOS_EXEC -X:aos:enable_precompile=true"
+AOS_EXEC="$AOS_EXEC -X:aos:enable_recompilation=false"
+AOS_EXEC="$AOS_EXEC -X:aos:cafi=${AOS_FILE_BASE}.ca"
+AOS_EXEC="$AOS_EXEC -X:vm:edgeCounterFile=${AOS_FILE_BASE}.ec"
+AOS_EXEC="$AOS_EXEC -X:aos:dcfi=${AOS_FILE_BASE}.dc"
+
+RVM="$RVM_DIR/dist/$arch/rvm"
+
+opt=""
+opt="$opt -X:gc:concurrentCopyMethod=stmseq2p"
+opt="$opt -X:gc:threads=8"
+opt="$opt -X:gc:variableSizeHeap=false"
+opt="$opt -X:gc:sanityCheck=false"
+opt="$opt -X:gc:verbose=0"
+opt="$opt -X:availableProcessors=32"
+opt="$opt -X:gc:ignoreSystemGC=true"
+opt="$opt -X:gc:stwTrigger=0"
+opt="$opt -X:gc:concurrentTriggerMethod=allocation"
+
+function parse_benchmark_config() {
+    local bench=$1
+    local heap=$2
+    local trigger=$3
+
+    if [ $EXCESSIVE_GC = true -o -z "$bench" ]; then
+	opt="$opt -Xmx1000m -Xms1000m"
+	opt="$opt -X:gc:concurrentTrigger=1"
+    else
+	opt="$opt -Xmx${heap}m -Xms${heap}m"
+	opt="$opt -X:gc:concurrentTrigger=${trigger}"
+    fi
+}
+parse_benchmark_config `grep $BENCH $BENCHMARKS`
+
+if [ $mode = build ]; then
+  echo $RVM $opt $AOS_BUILD -jar $DACAPO -n 10 $bench_name
+  $RVM $opt $AOS_BUILD -jar $DACAPO -n 10 $bench_name
+elif [ $mode = exec ]; then
+  sync
+  echo $RVM $opt $AOS_EXEC -jar $DACAPO -n 1 $bench_name
+  $RVM $opt $AOS_EXEC -jar $DACAPO -n 1 $bench_name
+elif [ $mode = test ]; then
+  echo $RVM $opt -jar $DACAPO -n 1 $bench_name
+  $RVM $opt -jar $DACAPO -n 1 $bench_name
+elif [ $mode = print ]; then
+  echo $RVM $opt -jar $DACAPO -n 1 $bench_name
+fi

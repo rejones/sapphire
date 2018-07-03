@@ -1,0 +1,13 @@
+# benchmark heap  trigger timeout mode
+pmd9        926   24576   16      time detail
+eclipse6    592   12288   240     time
+antlr6      195   4096    10      time
+avrora9     211   8192    28      time detail
+bloat6      294   8192    24      time
+fop6        271   8192    10      time
+hsqldb6     927   32768   10      time
+jython6     330   12288   10      time detail
+luindex9    221   8192    10      time detail
+lusearch9   335   16384   16      detail
+sunflow9    386   16384   10      time detail
+xalan9      468   16384   10      detail

@@ -4,27 +4,42 @@ Tomoharu Ugawa, Kochi University of Technology, Japan
 Carl Ritson, University of Kent, UK
 Richard Jones, University of Kent, UK
 
-This is an implementation of the Sapphire GC algorithm [1,2]. It is the first
-on-the-fly, parallel, replication copying, garbage collector for the Jikes RVM
-Java virtual machine. The implementation provides innovations such as copying 
-with hardware or software transactions, on-the-fly management of Java's 
-reference types and simple, yet correct, lock-free management of volatile 
+This is ahigh-performance implementation of the Sapphire GC algorithm [1,4]. 
+It is the first on-the-fly, parallel, replication copying, garbage collector 
+for the Jikes RVM Java virtual machine. The implementation provides innovations
+such as copying with hardware or software transactions, on-the-fly management of
+Java's reference types and simple, yet correct, lock-free management of volatile 
 fields in a replicating collector. 
 
-The jikesrvm directory provides the source code for the Jikes RVM including the
-Sapphire GC.
+* The jikesrvm directory provides the source code for the Jikes RVM including the
+  Sapphire GC.
 
-The models directory above provides SPIN models [3] of critical components of
-this complicated and highly concurrent system.
+* The models directory above provides SPIN models [3] of critical components of
+  this complicated and highly concurrent system.
 
-[1] Richard L. Hudson and J. Eliot B. Moss. 2003. Sapphire: Copying Garbage
-    Collection Without Stopping the World.  Concurrency and Computation:
-    Practice and Experience 15, 3–5 (2003), 223–261.
-    https://doi.org/10.1002/cpe.712
+For convenience, copies of our relevant published papers are here too:
 
-[2] Transactional Sapphire: Lessons in High Performance, On-the-fly Garbage 
-    Collection. Tomoharu Ugawa, Carl Ritson and Richard Jones [in submission]
+[1] TOPLAS4004-15 final.pdf
+    Tomoharu Ugawa, Carl Ritson and Richard Jones (2018). Transactional Sapphire: 
+    Lessons in High Performance, On-the-fly Garbage Collection. ACM Transactions on 
+    Programming Languages and Systems (TOPLAS), 40 (4). https://doi.org/10.1145/3226225
     
-[3] G. J. Holzmann. 2004. The SPIN Model Checker: Primer and Reference Manual. 
+[2] ismm021-ritson.pdf
+    Carl G. Ritson, Tomoharu Ugawa and Richard Jones (2014). Exploring Garbage 
+    Collection with Haswell Hardware Transactional Memory. International Symposium
+    on Memory management. https://doi.org/10.1145/2602988.2602992
+
+[3] ismm012-ugawa.pdf
+    Tomoharu Ugawa, Richard Jones and Carl G. Ritson (2014). Reference Object 
+    Processing in On-The-Fly Garbage Collection. International Symposium on Memory
+    Management. https://doi.org/10.1145/2602988.2602991
+
+Other relevant publications:
+
+[4] Richard L. Hudson and J. Eliot B. Moss (2003). Sapphire: Copying Garbage
+    Collection Without Stopping the World.  Concurrency and Computation:
+    Practice and Experience 15, 3–5 (2003), 223–261. https://doi.org/10.1002/cpe.712
+    
+[5] G. J. Holzmann (2004). The SPIN Model Checker: Primer and Reference Manual. 
     Addison-Wesley.
 
